@@ -125,7 +125,6 @@ std::string clean_string(std::string s) {
     int extra = 0;
     int i = 0;
 
-    //fprintf(stderr, "input: %s\n", s.c_str());
     while(i < (int)s.size() && r.size()+extra < 255) {
         if(isascii(s[i]))  {
             switch(s[i]) {
@@ -152,10 +151,8 @@ std::string clean_string(std::string s) {
                              if(end != std::string::npos) {
                                  std::string t = s.substr(i, end-i+1);
                                  if(html_conv.count(t)) {
-                                     //fprintf(stderr, "here1:%s %s\n", t.c_str(), html_conv[t].c_str());
                                      r.append(html_conv[t]);
                                      i += t.size();
-                                     //fprintf(stderr, "%s\n", r.c_str());
                                      continue;
                                  }
                              }
@@ -169,7 +166,6 @@ std::string clean_string(std::string s) {
         }
         i++;
     }
-    //fprintf(stderr, "here2 %s\n", r.c_str());
     return r.substr(0, 255-extra);
 }
 
@@ -775,28 +771,6 @@ void dumpCatches2(DexFile* pDexFile, const DexCode* pCode,
             start_targets.insert(handler->address);
         }
     }
-    
-    //check whether the last instruction of try block is reachable or not
-#if 0
-    for(std::set<std::pair<int,int>>:: iterator it = start_targets.begin(); it != start_targets.end(); it++) {
-        int start = code_map[it->first];
-        int end = code_map[it->second];
-        int size = code_map.size();
-printf("start:::%d %d %d %d\n", it->first, start, it->second, end);
-        while(start <= end) {
-            INST inst = code_cache[start].second;
-printf("running:::%d %d %d %d\n", it->first, start, it->second, end);
-            if(start == end) {
-printf("Here:::%d\n", it->second);
-                start_targets.insert(it->second);
-            }
-            if(isThrow(inst.opcode)) {
-                break;
-            }
-            start++;
-        }
-    }
-#endif
 }
 
 static int dumpPositionsCb(void * /* cnxt */, u4 address, u4 lineNum)
@@ -1452,11 +1426,11 @@ int dumpInstruction2(DexFile* pDexFile, const DexCode* pCode, int insnIdx,
         int end = t.rfind("\"");
         t = end == 1 ? "" : t.substr(1, end-1);
         inst_str.append(clean_string(t));
-        //inst_str = inst_str.substr(0, 263);
     } else if(inst_str == "const-class") {
         std::string t = std::string(indexBuf);
         int end = t.rfind(" //");
-        inst_str.append(t.substr(0, end));
+        t = t.substr(0, end);
+        inst_str.append(clean_string(t));
     } else if(inst_str.compare(0, 5, "const") == 0) {
         std::string val = formatInstr(pDexFile, insnIdx, pDecInsn, indexBuf);
         if(inst_str == "const-wide") {
@@ -1713,12 +1687,21 @@ void genBBSignature(std::vector<std::pair<std::string, struct INST>> &code_cache
 
 void printSignature(std::string path)
 {
+#if 0
     std::ofstream outfile("results1");
     outfile<<featureVector.count()<<std::endl;
     outfile<<bit_size<<std::endl;
     for(int i = 0;i < bit_size;i++) {
         if(featureVector[i] == 1) {
             outfile<<i<<" "<<1<<" "<<2<<" "<<3<<std::endl;
+        }
+    }
+#endif
+    std::cout<<featureVector.count()<<std::endl;
+    std::cout<<bit_size<<std::endl;
+    for(int i = 0;i < bit_size;i++) {
+        if(featureVector[i] == 1) {
+            std::cout<<i<<" "<<1<<" "<<2<<" "<<3<<std::endl;
         }
     }
 }
@@ -1770,17 +1753,9 @@ void dumpBytecodes2(DexFile* pDexFile, const DexMethod* pDexMethod,
     getMethodInfo(pDexFile, pDexMethod->methodIdx, &methInfo);
     className = descriptorToDot(methInfo.classDescriptor);
 
-    //printf("%s.%s:%s\n",
-    //    className, methInfo.name, methInfo.signature);
     fDes = std::string(className);
     changeString(fDes, '.', '/');
     fDes += "." + std::string(methInfo.name) + ";";
-
-    //std::vector<std::pair<std::string, struct INST>> code_cache;
-    //std::unordered_map<int, int> code_map;
-    //std::set<int> start_targets;
-    
-    //start_targets.insert(0);
 
     insnIdx = 0;
     int index = 0;
@@ -1867,13 +1842,8 @@ void dumpCode2(DexFile* pDexFile, const DexMethod* pDexMethod)
     dumpBytecodes2(pDexFile, pDexMethod, code_cache, code_map, fDes);
     dumpCatches2(pDexFile, pCode, code_cache, code_map, start_targets, candidate_targets);
     generateBB(code_cache, code_map, start_targets, candidate_targets);
-    //printBB(fDes, code_cache);
     genBBSignature(code_cache);
-    
-    //dumpCatches(pDexFile, pCode);
-    /* both of these are encoded in debug info */
-    //dumpPositions(pDexFile, pCode, pDexMethod);
-    //dumpLocals(pDexFile, pCode, pDexMethod);
+    //printBB(fDes, code_cache); 
 }
 
 /*
@@ -2107,8 +2077,6 @@ void dumpClass(DexFile* pDexFile, int idx, char** pLastPackage)
     pClassDef = dexGetClassDef(pDexFile, idx);
 
     if (gOptions.exportsOnly && (pClassDef->accessFlags & ACC_PUBLIC) == 0) {
-        //printf("<!-- omitting non-public class %s -->\n",
-        //    classDescriptor);
         goto bail;
     }
 
@@ -2311,8 +2279,6 @@ void dumpClass2(DexFile* pDexFile, int idx, char** pLastPackage)
     pClassDef = dexGetClassDef(pDexFile, idx);
 
     if (gOptions.exportsOnly && (pClassDef->accessFlags & ACC_PUBLIC) == 0) {
-        //printf("<!-- omitting non-public class %s -->\n",
-        //    classDescriptor);
         goto bail;
     }
 
@@ -2758,7 +2724,7 @@ int main(int argc, char* const argv[])
 
     printSignature("");
 
-    fprintf(stderr, "Memory Usage %lld KB\n", read_proc(getpid()));
+    //fprintf(stderr, "Memory Usage %lld KB\n", read_proc(getpid()));
 
     return (result != 0);
 }
