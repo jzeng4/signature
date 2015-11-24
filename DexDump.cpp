@@ -79,8 +79,7 @@ struct INST {
 
 std::unordered_map<std::string, std::string> html_conv = {{"&quot;", "\""}, {"&amp;", "&"}, {"&lt;", "<"}, {"&gt;", ">"}, {"&apos;", "'"}};
 
-static std::string formatInstr(DexFile* pDexFile, int insnIdx, 
-        const DecodedInstruction* pDecInsn, char *indexBuf);
+static std::string formatInstr(int insnIdx, const DecodedInstruction* pDecInsn, char *indexBuf);
 
 bool isIfTestZ(enum Opcode op) {
     return op >= OP_IF_EQZ && op <= OP_IF_LEZ;
@@ -147,7 +146,7 @@ std::string clean_string(std::string s) {
                      } else {
                          switch(s[i]) {
                             case '&':
-                             int end = s.find(';', i);
+                             unsigned long end = s.find(';', i);
                              if(end != std::string::npos) {
                                  std::string t = s.substr(i, end-i+1);
                                  if(html_conv.count(t)) {
@@ -728,8 +727,7 @@ void dumpCatches(DexFile* pDexFile, const DexCode* pCode)
 void dumpCatches2(DexFile* pDexFile, const DexCode* pCode,
                     std::vector<std::pair<std::string, struct INST>> &code_cache,
                     std::unordered_map<int, int> &code_map,
-                    std::unordered_set<int> &start_targets,
-                    std::unordered_set<int> &candidate_targets)
+                    std::unordered_set<int> &start_targets)
 {
     u4 triesSize = pCode->triesSize;
 
@@ -753,7 +751,6 @@ void dumpCatches2(DexFile* pDexFile, const DexCode* pCode,
         if(index > 0 && isThrow(code_cache[index-1].second.opcode) == false) {
             start_targets.insert(end);
         }
-        //candidate_targets.insert(end);
 
         dexCatchIteratorInit(&iterator, pCode, pTry->handlerOff);
 
@@ -1221,7 +1218,7 @@ void dumpInstruction(DexFile* pDexFile, const DexCode* pCode, int insnIdx,
     }
 }
 
-static std::string formatInstr(DexFile* pDexFile, int insnIdx, 
+static std::string formatInstr(int insnIdx, 
         const DecodedInstruction* pDecInsn, char *indexBuf)
 {
     int i;
@@ -1432,7 +1429,7 @@ int dumpInstruction2(DexFile* pDexFile, const DexCode* pCode, int insnIdx,
         t = t.substr(0, end);
         inst_str.append(clean_string(t));
     } else if(inst_str.compare(0, 5, "const") == 0) {
-        std::string val = formatInstr(pDexFile, insnIdx, pDecInsn, indexBuf);
+        std::string val = formatInstr(insnIdx, pDecInsn, indexBuf);
         if(inst_str == "const-wide") {
         } else if(inst_str == "const-wide/high16") {
             val.insert(0, std::string(4-val.size(), '0'));
@@ -1578,8 +1575,7 @@ void dumpBytecodes(DexFile* pDexFile, const DexMethod* pDexMethod)
     free(className);
 }
 
-void do_generateBB(int index, int size, std::vector<std::pair<std::string, struct INST>> &code_cache,
-                    std::unordered_map<int, int> &code_map) {
+void do_generateBB(int index, int size, std::vector<std::pair<std::string, struct INST>> &code_cache) {
     code_cache[index].second.flag = 2;
     for(int i = index;i < size;i++) {
         int t1, t2;
@@ -1596,8 +1592,7 @@ void do_generateBB(int index, int size, std::vector<std::pair<std::string, struc
 
 void generateBB(std::vector<std::pair<std::string, struct INST>> &code_cache,
                  std::unordered_map<int, int> &code_map,
-                 std::unordered_set<int> &targets,
-                 std::unordered_set<int> &candidates)
+                 std::unordered_set<int> &targets)
 {
     int size = code_cache.size();
     for(int i = 0;i < size;i++) {
@@ -1615,7 +1610,7 @@ void generateBB(std::vector<std::pair<std::string, struct INST>> &code_cache,
     for(std::unordered_set<int>::iterator it = targets.begin();
             it != targets.end();it++) {
         if(code_map.count(*it)) {
-            do_generateBB(code_map[*it], size, code_cache, code_map);
+            do_generateBB(code_map[*it], size, code_cache);
         }
     }
 #if 0
@@ -1685,7 +1680,7 @@ void genBBSignature(std::vector<std::pair<std::string, struct INST>> &code_cache
     }
 }
 
-void printSignature(std::string path)
+void printSignature()
 {
 #if 0
     std::ofstream outfile("results1");
@@ -1836,12 +1831,11 @@ void dumpCode2(DexFile* pDexFile, const DexMethod* pDexMethod)
     std::vector<std::pair<std::string, struct INST>> code_cache;
     std::unordered_map<int, int> code_map;
     std::unordered_set<int> start_targets = {0};
-    std::unordered_set<int> candidate_targets = {0};
     std::string fDes;
 
     dumpBytecodes2(pDexFile, pDexMethod, code_cache, code_map, fDes);
-    dumpCatches2(pDexFile, pCode, code_cache, code_map, start_targets, candidate_targets);
-    generateBB(code_cache, code_map, start_targets, candidate_targets);
+    dumpCatches2(pDexFile, pCode, code_cache, code_map, start_targets);
+    generateBB(code_cache, code_map, start_targets);
     genBBSignature(code_cache);
     //printBB(fDes, code_cache); 
 }
@@ -2233,7 +2227,7 @@ bail:
 /*
  * Dump a method2.
  */
-void dumpMethod2(DexFile* pDexFile, const DexMethod* pDexMethod, int i)
+void dumpMethod2(DexFile* pDexFile, const DexMethod* pDexMethod)
 {
     const DexMethodId* pMethodId;
     const char* backDescriptor;
@@ -2266,7 +2260,7 @@ bail:
     free(accessStr);
 }
 
-void dumpClass2(DexFile* pDexFile, int idx, char** pLastPackage)
+void dumpClass2(DexFile* pDexFile, int idx)
 {
     const DexClassDef* pClassDef;
     DexClassData* pClassData = NULL;
@@ -2291,11 +2285,11 @@ void dumpClass2(DexFile* pDexFile, int idx, char** pLastPackage)
     }
 
     for (i = 0; i < (int) pClassData->header.directMethodsSize; i++) {
-        dumpMethod2(pDexFile, &pClassData->directMethods[i], i);
+        dumpMethod2(pDexFile, &pClassData->directMethods[i]);
     }
 
     for (i = 0; i < (int) pClassData->header.virtualMethodsSize; i++) {
-        dumpMethod2(pDexFile, &pClassData->virtualMethods[i], i);
+        dumpMethod2(pDexFile, &pClassData->virtualMethods[i]);
     }
 
 bail:
@@ -2512,9 +2506,9 @@ void processDexFile(const char* fileName, DexFile* pDexFile)
     char* package = NULL;
     int i;
 
-    if (gOptions.verbose) {
-        //printf("Opened '%s', DEX version '%.3s'\n", fileName,
-        //    pDexFile->pHeader->magic +4);
+    if (gOptions.verbose && !gOptions.dumpInstruction) {
+        printf("Opened '%s', DEX version '%.3s'\n", fileName,
+            pDexFile->pHeader->magic +4);
     }
 
     if (gOptions.dumpRegisterMaps) {
@@ -2535,7 +2529,7 @@ void processDexFile(const char* fileName, DexFile* pDexFile)
             dumpClassDef(pDexFile, i);
 
         if(gOptions.dumpInstruction) {
-            dumpClass2(pDexFile, i, &package);
+            dumpClass2(pDexFile, i);
         } else {
             dumpClass(pDexFile, i, &package);
         }
@@ -2722,7 +2716,7 @@ int main(int argc, char* const argv[])
     }
 
 
-    printSignature("");
+    printSignature();
 
     //fprintf(stderr, "Memory Usage %lld KB\n", read_proc(getpid()));
 
